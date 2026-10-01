@@ -1,5 +1,6 @@
 import os
 import platform
+import shutil
 from datetime import datetime
 
 
@@ -20,20 +21,20 @@ Available commands:
 
 
 def show_time():
-    """Prints the current local time in HH:MM:SS AM/PM format."""
+    """Prints the current local time."""
     now = datetime.now()
     print(f"Current time: {now.strftime('%I:%M:%S %p')}")
 
 
 def show_system():
-    """Prints basic system information such as OS, architecture, and Python version."""
+    """Prints basic system information."""
     print(f"Operating system: {platform.system()} {platform.release()}")
     print(f"Machine: {platform.machine()}")
     print(f"Python: {platform.python_version()}")
 
 
 def list_files():
-    """Lists all files and directories in the current working directory."""
+    """Lists files and folders in the current directory."""
     files = os.listdir(".")
 
     if not files:
@@ -46,12 +47,8 @@ def list_files():
         print(f"  - {file}")
 
 
-def create_folder(command):
-    """
-    Creates a new directory with the specified name.
-    Expects the command string to start with 'create folder '.
-    """
-    folder_name = command.removeprefix("create folder").strip()
+def create_folder(folder_name):
+    """Creates a folder using the name provided by the user."""
 
     if not folder_name:
         print("Tell me the folder name.")
@@ -61,15 +58,19 @@ def create_folder(command):
         print(f"'{folder_name}' already exists.")
         return
 
-    os.makedirs(folder_name)
-    print(f"Created folder: {folder_name}")
+    try:
+        os.makedirs(folder_name)
+        print(f"Created folder: {folder_name}")
+
+    except OSError as error:
+        print(f"I couldn't create that folder: {error}")
 
 
 def find_pdfs():
-    """Recursively searches for and lists all PDF files in the current directory and its subdirectories."""
+    """Recursively searches for PDF files."""
+
     pdfs = []
 
-    # Walk through the directory tree
     for root, directories, files in os.walk("."):
         for file in files:
             if file.lower().endswith(".pdf"):
@@ -86,54 +87,106 @@ def find_pdfs():
 
 
 def disk_usage():
-    """Displays disk usage information based on file system blocks."""
-    # NOTE: os.statvfs is Unix-specific and may not work on Windows
-    total, used, free = os.statvfs(".").f_blocks, os.statvfs(".").f_bfree, os.statvfs(".").f_bavail
+    """Displays disk usage information."""
 
-    print(f"Available blocks: {free}")
-    print(f"Total blocks: {total}")
+    total, used, free = shutil.disk_usage(".")
+
+    print(f"Total space: {total / (1024 ** 3):.2f} GB")
+    print(f"Used space: {used / (1024 ** 3):.2f} GB")
+    print(f"Free space: {free / (1024 ** 3):.2f} GB")
+
+
+def understand_command(command):
+    """
+    Determines what the user wants Butler to do.
+
+    Returns either:
+        - a simple intent such as "time"
+        - or an intent with data, such as ("create_folder", "School")
+    """
+
+    command = command.strip().lower()
+
+    # List files
+    if "file" in command and any(
+        word in command for word in ["list", "show", "see"]
+    ):
+        return "list_files"
+
+    # Time
+    if "time" in command:
+        return "time"
+
+    # System information
+    if "system" in command:
+        return "system"
+
+    # Find PDFs
+    if "pdf" in command:
+        return "find_pdfs"
+
+    # Disk usage
+    if "disk" in command:
+        return "disk_usage"
+
+    # Create folder + extract folder name
+    if command.startswith("create folder"):
+        folder_name = command.removeprefix("create folder").strip()
+
+        return ("create_folder", folder_name)
+
+    # Exit
+    if command == "exit":
+        return "exit"
+
+    # Help
+    if command == "help":
+        return "help"
+
+    # Unknown request
+    return None
 
 
 def handle_command(command):
-    """
-    Parses and executes the user's input command.
-    Returns True to continue running, or False to exit.
-    """
-    command = command.strip().lower()
+    """Takes the user's input, determines the intent, and executes it."""
 
-    if command == "help":
+    intent = understand_command(command)
+
+    if intent == "help":
         show_help()
 
-    elif command == "time":
+    elif intent == "time":
         show_time()
 
-    elif command == "system":
+    elif intent == "system":
         show_system()
 
-    elif command == "list files":
+    elif intent == "list_files":
         list_files()
 
-    elif command.startswith("create folder"):
-        create_folder(command)
-
-    elif command == "find pdfs":
+    elif intent == "find_pdfs":
         find_pdfs()
 
-    elif command == "disk usage":
+    elif intent == "disk_usage":
         disk_usage()
 
-    elif command == "exit":
+    elif isinstance(intent, tuple) and intent[0] == "create_folder":
+        folder_name = intent[1]
+        create_folder(folder_name)
+
+    elif intent == "exit":
         return False
 
     else:
-        print("I don't understand that command yet.")
-        print("Type 'help' to see what I can do.")
+        print("I don't understand that request yet.")
+        print("Try asking me something I can currently do.")
 
     return True
 
 
-def main():
-    """Main entry point for the Computer Butler application loop."""
+def show_welcome():
+    """Displays a welcome message when Butler starts."""
+
     print("""
 ================================
         COMPUTER BUTLER
@@ -141,6 +194,12 @@ def main():
 
 Type 'help' to see what I can do.
 """)
+
+
+def main():
+    """Main entry point for the Computer Butler application."""
+
+    show_welcome()
 
     running = True
 
